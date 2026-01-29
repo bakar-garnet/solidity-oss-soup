@@ -14,15 +14,17 @@ jobs:
         uses: garnet-org/action@v1
         with:
           api_token: ${{ secrets.GARNET_API_TOKEN }}
-          api_url: https://jibril.garnet.ai
+          api_url: https://dashboard.garnet.ai
           debug: true
           continue_on_error: false
-          jibril_version: latest
-          garnetctl_version: latest
 
       - uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - run: npm install
-      - run: npm run run
+      - name: Install deps
+        run: npm install
+
+      - name: Run loud workload
+        run: npm run run
+
