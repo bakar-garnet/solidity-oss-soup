@@ -1,30 +1,47 @@
-name: Jibril Loud Runtime (oss soup)
+name: Jibril Runtime Scan
 
 on:
   push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  run:
+  jibril:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Start Jibril (must succeed)
-        uses: garnet-org/action@v1
-        with:
-          api_token: ${{ secrets.GARNET_API_TOKEN }}
-          api_url: https://dashboard.garnet.ai
-          debug: true
-          continue_on_error: false
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install deps
+      - name: Verify API token is present
+        run: |
+          if [ -z "$GARNET_API_TOKEN" ]; then
+            echo "❌ GARNET_API_TOKEN is missing"
+            exit 1
+          fi
+          echo "✅ GARNET_API_TOKEN detected"
+        env:
+          GARNET_API_TOKEN: ${{ secrets.GARNET_API_TOKEN }}
+
+      - name: Start Jibril Runtime Monitor
+        uses: garnet-org/action@v1
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+          api_url: https://jibril.garnet.ai
+          debug: true
+          continue_on_error: false
+
+      - name: Install dependencies
         run: npm install
 
-      - name: Run loud workload
-        run: npm run run
+      - name: Run workload
+        run: |
+          npm run build || true
+          npm run test || true
+          node scripts/soup.mjs || true
 
