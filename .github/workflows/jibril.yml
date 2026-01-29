@@ -10,19 +10,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Start Jibril (must succeed)
+        uses: garnet-org/action@v1
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+          debug: true
+          continue_on_error: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      # Install deps WITHOUT jibril (not interesting)
-      - name: Install dependencies
+      - name: Install deps
         run: npm install
 
-      # 🔴 THIS IS THE IMPORTANT PART
-      - name: Run workload through Jibril
-        uses: garnet-org/action@v1
-        with:
-          api_token: ${{ secrets.GARNET_API_TOKEN }}
-          command: |
-            npm run run
+      - name: Run loud workload
+        run: |
+          set -x
+          npm run run
