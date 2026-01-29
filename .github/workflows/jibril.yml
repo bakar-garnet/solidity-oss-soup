@@ -1,0 +1,26 @@
+name: Jibril Loud Runtime (oss soup)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add Monitor
+        uses: garnet-org/action@v1
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install + run (big single step)
+        run: |
+          set -x
+          npm install
+          npm run run
