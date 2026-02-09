@@ -1,25 +1,149 @@
-name: Jibril Runtime Scan
+name: Garnet CI Pressure Test
 
 on:
   push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      shards:
+        description: "Parallel shards (more = more jobs)"
+        required: true
+        default: "8"
+      repeats:
+        description: "Repeat workload inside each shard"
+        required: true
+        default: "3"
+  schedule:
+    - cron: "0 */6 * * *"
 
 jobs:
-  jibril:
+  # ---- Job 1: Install + build/test (heavier, more exec trees) ----
+  build_test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: garnet-org/action@v1
+      - name: Run Jibril Security Scanner
+        uses: garnet-org/action@v0
         with:
           api_token: ${{ secrets.GARNET_API_TOKEN }}
+          garnetctl_version: "latest"
+          jibril_version: "0.0"
 
-      - name: Generate activity (to help trigger detections)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install deps (auto)
         run: |
-          set -eux
-          cat /proc/self/environ || true
-          cat /etc/passwd || true
-          ls -la /tmp || true
-          curl -fsSL https://example.com >/dev/null || true
-          curl -fsSL https://ifconfig.me || true
+          set -e
+          if [ -f pnpm-lock.yaml ]; then
+            corepack prepare pnpm@latest --activate
+            pnpm install --frozen-lockfile || pnpm install
+          elif [ -f yarn.lock ]; then
+            corepack prepare yarn@stable --activate
+            yarn install --immutable || yarn install
+          else
+            npm ci || npm install
+          fi
 
+      - name: Build/Test/Lint loop
+        run: |
+          set -e
+          REPEATS="${{ github.event.inputs.repeats }}"
+          if [ -z "$REPEATS" ]; then REPEATS="2"; fi
+          echo "node=${{ matrix.node }} shard=${{ matrix.shard }} repeats=$REPEATS"
+
+          for i in $(seq 1 "$REPEATS"); do
+            echo "=== Iteration $i/$REPEATS ==="
+            (npm -s test || yarn -s test || pnpm -s test || true)
+            (npm -s run build || yarn -s build || pnpm -s build || true)
+            (npm -s run lint || yarn -s lint || pnpm -s lint || true)
+          done
+
+  # ---- Job 2: Install-only (fast, lots of network + scripts) ----
+  install_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Jibril Security Scanner
+        uses: garnet-org/action@v0
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+          garnetctl_version: "latest"
+          jibril_version: "0.0"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install deps only (auto)
+        run: |
+          set -e
+          if [ -f pnpm-lock.yaml ]; then
+            corepack prepare pnpm@latest --activate
+            pnpm install --frozen-lockfile || pnpm install
+          elif [ -f yarn.lock ]; then
+            corepack prepare yarn@stable --activate
+            yarn install --immutable || yarn install
+          else
+            npm ci || npm install
+          fi
+
+  # ---- Job 3: CLI smoke (creates extra process trees + npx fetches) ----
+  cli_smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Jibril Security Scanner
+        uses: garnet-org/action@v0
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+          garnetctl_version: "latest"
+          jibril_version: "0.0"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: CLI smoke (benign but noisy)
+        run: |
+          set -euxo pipefail
+          node -v
+          npm -v
+          npx -y eslint -v || true
+          npx -y prettier -v || true
+          npx -y vite --version || true
+          curl -I https://registry.npmjs.org/ || true
+          curl -I https://github.com/ || true
